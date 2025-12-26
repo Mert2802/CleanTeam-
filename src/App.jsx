@@ -1,6 +1,6 @@
 import { useAuth } from "./hooks/useAuth";
 import Login from "./auth/Login";
-import CleanTeamApp from "./CleanTeamApp"; // Diese wird später refaktorieriert
+import CleanTeamApp from "./CleanTeamApp";
 
 const App = () => {
   const { authUser, isLoading } = useAuth();
@@ -8,7 +8,7 @@ const App = () => {
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center text-slate-400">
-        Authentifizierung wird geprüft...
+        Authentifizierung wird geprueft...
       </div>
     );
   }

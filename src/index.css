@@ -1,3 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+:root {
+  --ct-bg: #f4f1ed;
+  --ct-card: #ffffff;
+  --ct-ink: #1c1b1a;
+  --ct-muted: #6b6b6b;
+  --ct-accent: #0f766e;
+  --ct-accent-2: #f97316;
+  --ct-ring: rgba(15, 118, 110, 0.3);
+}
+
+body {
+  font-family: "Manrope", "Space Grotesk", "Segoe UI", sans-serif;
+  background: var(--ct-bg);
+  color: var(--ct-ink);
+}

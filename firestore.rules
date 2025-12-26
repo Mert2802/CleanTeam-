@@ -29,6 +29,17 @@ service cloud.firestore {
         );
     }
 
+    function isAssignedToTask() {
+      return (resource.data.assignedTo is list && request.auth.uid in resource.data.assignedTo)
+        || resource.data.assignedTo == request.auth.uid;
+    }
+
+    function isAssignedToTaskId(teamId, taskId) {
+      let task = get(/databases/$(database)/documents/artifacts/cleanteam-test/teams/$(teamId)/tasks/$(taskId)).data;
+      return (task.assignedTo is list && request.auth.uid in task.assignedTo)
+        || task.assignedTo == request.auth.uid;
+    }
+
     match /artifacts/cleanteam-test/teams/{teamId} {
       allow read: if isTeamMember(teamId);
       // Owner kann das Team ändern; neue Mitglieder können sich selbst zur `members`-Map hinzufügen.
@@ -66,8 +77,15 @@ service cloud.firestore {
         allow read: if isTeamMember(teamId);
         allow create, delete: if isTeamOwner(teamId);
         allow update: if isTeamOwner(teamId) ||
-          (isTeamMember(teamId) &&
-           request.auth.uid in resource.data.assignedTo);
+          (isTeamMember(teamId) && isAssignedToTask());
+      }
+
+      match /tasks/{taskId}/workLogs/{uid} {
+        allow read: if isTeamOwner(teamId);
+        allow create, update: if isTeamMember(teamId)
+          && request.auth.uid == uid
+          && isAssignedToTaskId(teamId, taskId);
+        allow delete: if false;
       }
 
       match /properties/{propId} {
@@ -78,6 +96,11 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isTeamMember(teamId);
         allow create: if isTeamMember(teamId);
+        allow update, delete: if isTeamOwner(teamId);
+      }
+
+      match /directMessages/{staffId}/messages/{messageId} {
+        allow read, create: if isTeamOwner(teamId) || request.auth.uid == staffId;
         allow update, delete: if isTeamOwner(teamId);
       }
     }

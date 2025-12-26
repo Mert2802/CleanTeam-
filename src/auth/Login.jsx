@@ -5,7 +5,7 @@ import { signIn, signUpWithInvite } from "./authService";
 const getFirebaseErrorMessage = (errorCode) => {
   switch (errorCode) {
     case "auth/invalid-email":
-      return "Ungültiges E-Mail-Format.";
+      return "Ungueltiges E-Mail-Format.";
     case "auth/user-not-found":
     case "auth/wrong-password":
       return "Falsche E-Mail oder Passwort.";
@@ -43,10 +43,8 @@ export default function Login() {
     try {
       if (isLogin) {
         await signIn(email, password);
-        // Die App wird durch den Auth-State-Listener automatisch weiterleiten
       } else {
         await signUpWithInvite(email, password, inviteCode);
-        // Nach der Registrierung wird der Benutzer automatisch eingeloggt
       }
     } catch (err) {
       console.error(err);
@@ -57,16 +55,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white shadow-lg rounded-xl border border-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-amber-50 to-stone-200 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white/90 backdrop-blur shadow-xl rounded-3xl border border-stone-100">
         <div className="p-8">
           <div className="flex flex-col items-center text-center mb-8">
-            <div className="p-3 bg-emerald-500 text-white rounded-full mb-3">
+            <div className="p-3 bg-teal-600 text-white rounded-2xl mb-3">
               <Brush size={32} />
             </div>
             <h1 className="text-3xl font-bold text-slate-800">CleanTeam</h1>
             <p className="text-slate-500 mt-1">
-              {isLogin ? "Willkommen zurück!" : "Erstelle deinen Account"}
+              {isLogin ? "Willkommen zurueck!" : "Account mit Einladung erstellen"}
             </p>
           </div>
 
@@ -77,7 +75,7 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="E-Mail Adresse"
               required
-              className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
             />
             <input
               type="password"
@@ -85,7 +83,7 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Passwort"
               required
-              className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
             />
             {!isLogin && (
               <input
@@ -94,12 +92,12 @@ export default function Login() {
                 onChange={(e) => setInviteCode(e.target.value)}
                 placeholder="Einladungscode"
                 required
-                className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
               />
             )}
 
             {error && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm flex items-center gap-2">
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm flex items-center gap-2">
                 <AlertTriangle size={16} />
                 <span>{error}</span>
               </div>
@@ -108,7 +106,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-slate-900 text-white py-3 rounded-lg font-semibold hover:bg-slate-800 transition-colors disabled:opacity-70 flex items-center justify-center"
+              className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 transition-colors disabled:opacity-70 flex items-center justify-center"
             >
               {loading ? (
                 <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -119,13 +117,13 @@ export default function Login() {
           </form>
         </div>
 
-        <div className="bg-slate-50 p-4 text-center rounded-b-xl border-t border-slate-100">
+        <div className="bg-slate-50/80 p-4 text-center rounded-b-3xl border-t border-slate-100">
           <button
             onClick={() => {
               setIsLogin(!isLogin);
               setError("");
             }}
-            className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+            className="text-sm text-teal-700 hover:text-teal-800 font-medium"
           >
             {isLogin
               ? "Kein Account? Mit Einladungscode registrieren"

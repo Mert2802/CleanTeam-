@@ -5,60 +5,58 @@ import {
   collection,
   doc,
   onSnapshot,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import TeamView from "./components/views/Team";
 import SettingsView from "./components/views/Settings";
 import CalendarView from "./components/views/CalendarView";
 import PropertiesView from "./components/views/PropertiesView";
-import TeamChat from "./components/TeamChat";
+import TaskModal from "./components/TaskModal";
+import AdminChat from "./components/chat/AdminChat";
+import StaffChat from "./components/chat/StaffChat";
 import {
   AlertTriangle,
   Brush,
   Camera,
   Calendar,
   CheckCircle,
+  ClipboardList,
   Home,
   LogOut,
   MapPin,
   Menu,
   MessageSquare,
   RefreshCw,
-  Settings,
   Users,
   X,
 } from "lucide-react";
 
-// HINWEIS: Viele UI-Komponenten (Views, Modals) sind hier vorerst als Platzhalter
-// oder vereinfachte Versionen belassen. Sie werden in den nächsten Schritten
-// in eigene Dateien ausgelagert und vervollständigt.
-
-/* ---------------- Haupt-App-Komponente ---------------- */
+const safeArray = (v) => (Array.isArray(v) ? v : []);
+const todayISO = () => new Date().toISOString().split("T")[0];
 
 export default function CleanTeamApp({ authUser }) {
   const [loading, setLoading] = useState(true);
   const { teamId, role } = authUser;
 
-  // States für die Team-Daten
   const [tasks, setTasks] = useState([]);
   const [staff, setStaff] = useState([]);
   const [properties, setProperties] = useState([]);
   const [appSettings, setAppSettings] = useState(null);
 
-  // UI-States
   const [view, setView] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [uploadingTask, setUploadingTask] = useState(null);
+  const [activeTask, setActiveTask] = useState(null);
+  const [isSavingTask, setIsSavingTask] = useState(false);
 
-  // Effekt für Firestore-Subscriptions basierend auf der Team-ID
   useEffect(() => {
     if (!teamId) {
-        setLoading(false);
-        return;
+      setLoading(false);
+      return;
     }
-    
-    console.log(`Initialisiere Listener für Team-ID: ${teamId}`);
+
     setLoading(true);
     const base = ["artifacts", appId, "teams", teamId];
 
@@ -75,13 +73,17 @@ export default function CleanTeamApp({ authUser }) {
       setProperties(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
 
-    const unsubTasks = onSnapshot(collection(db, ...base, "tasks"), (snap) => {
-      setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    }, (err) => {
-      console.error("Fehler beim Laden der Aufgaben:", err);
-      setLoading(false);
-    });
+    const unsubTasks = onSnapshot(
+      collection(db, ...base, "tasks"),
+      (snap) => {
+        setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Fehler beim Laden der Aufgaben:", err);
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsubSettings();
@@ -89,7 +91,7 @@ export default function CleanTeamApp({ authUser }) {
       unsubProperties();
       unsubTasks();
     };
-  }, [teamId]); // Dieser Effekt reagiert jetzt auf die Änderung der teamId.
+  }, [teamId]);
 
   const handleTaskStatusChange = async (taskId, newStatus, issueText = null) => {
     if (!teamId) return;
@@ -106,6 +108,77 @@ export default function CleanTeamApp({ authUser }) {
     if (issueText) updateData.issueReport = issueText;
 
     await updateDoc(doc(db, `artifacts/${appId}/teams/${teamId}/tasks`, taskId), updateData);
+  };
+
+  const handleTaskUpdate = async (taskId, updates) => {
+    if (!teamId || !taskId) return;
+    setIsSavingTask(true);
+    try {
+      await updateDoc(doc(db, `artifacts/${appId}/teams/${teamId}/tasks`, taskId), {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      });
+      setActiveTask(null);
+    } catch (err) {
+      console.error("Task Update Fehler:", err);
+    } finally {
+      setIsSavingTask(false);
+    }
+  };
+
+  const handleChecklistToggle = async (task, index) => {
+    if (!teamId || !task?.id) return;
+    const done = safeArray(task.checklistDone);
+    const next = done.includes(index) ? done.filter((i) => i !== index) : [...done, index];
+    await updateDoc(doc(db, `artifacts/${appId}/teams/${teamId}/tasks`, task.id), {
+      checklistDone: next,
+    });
+  };
+
+  const getPosition = () => new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+      },
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+
+  const logWork = async (taskId, payload) => {
+    if (!teamId || !taskId) return;
+    const logRef = doc(db, `artifacts/${appId}/teams/${teamId}/tasks/${taskId}/workLogs`, authUser.uid);
+    await setDoc(logRef, {
+      uid: authUser.uid,
+      ...payload,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  };
+
+  const startTaskForStaff = async (task) => {
+    const location = await getPosition();
+    await logWork(task.id, {
+      startedAt: new Date().toISOString(),
+      startLocation: location,
+    });
+    await handleTaskStatusChange(task.id, "in-progress");
+  };
+
+  const completeTaskForStaff = async (task) => {
+    const location = await getPosition();
+    await logWork(task.id, {
+      completedAt: new Date().toISOString(),
+      endLocation: location,
+    });
+    await handleTaskStatusChange(task.id, "completed");
   };
 
   const handlePhotoUpload = async (taskId, type, file) => {
@@ -135,10 +208,6 @@ export default function CleanTeamApp({ authUser }) {
     }
   };
 
-
-
-  // ---- Render-Logik basierend auf Rolle und Ladezustand ----
-
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center text-slate-400">
@@ -147,7 +216,6 @@ export default function CleanTeamApp({ authUser }) {
     );
   }
 
-  // Wenn der Benutzer ein Mitarbeiter ist, zeige direkt die Staff-Ansicht
   if (role === "staff") {
     return (
       <>
@@ -156,26 +224,27 @@ export default function CleanTeamApp({ authUser }) {
           staff={staff}
           authUser={authUser}
           onStatusChange={handleTaskStatusChange}
+          onStartTask={startTaskForStaff}
+          onCompleteTask={completeTaskForStaff}
           onPhotoUpload={handlePhotoUpload}
           uploadingTask={uploadingTask}
           onImageSelect={setSelectedImage}
+          onChecklistToggle={handleChecklistToggle}
           teamId={teamId}
         />
         <ImageModal src={selectedImage} onClose={() => setSelectedImage(null)} />
       </>
     );
   }
-  
-  // Wenn der Benutzer ein Owner ist (oder eine andere zukünftige Rolle hat)
-  // zeige die volle Desktop-Anwendung.
+
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+    <div className="flex h-screen bg-[var(--ct-bg)] text-slate-900 overflow-hidden">
       <Sidebar view={view} setView={setView} setSidebarOpen={setSidebarOpen} sidebarOpen={sidebarOpen} />
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <div className="md:hidden bg-white p-4 flex items-center justify-between border-b border-slate-200 shadow-sm">
+        <div className="md:hidden bg-white/80 backdrop-blur p-4 flex items-center justify-between border-b border-slate-200">
           <h1 className="font-bold text-lg flex items-center gap-2">
-            <Brush className="text-emerald-500" /> CleanTeam
+            <Brush className="text-teal-600" /> CleanTeam
           </h1>
           <button onClick={() => setSidebarOpen(true)} className="p-2 text-slate-600">
             <Menu size={24} />
@@ -183,25 +252,50 @@ export default function CleanTeamApp({ authUser }) {
         </div>
 
         <div className="flex-1 overflow-auto p-4 md:p-8">
-          <div className="max-w-7xl mx-auto">
-            {/* Hier werden die Views basierend auf dem State gerendert */}
-            {view === "dashboard" && <DashboardView tasks={tasks} />}
-            {view === "calendar" && <CalendarView tasks={tasks} staff={staff} />}
-            {view === "properties" && <PropertiesView properties={properties} staff={staff} tasks={tasks} teamId={teamId} />}
+          <div className="max-w-7xl mx-auto space-y-6">
+            {view === "dashboard" && (
+              <DashboardView
+                tasks={tasks}
+                staff={staff}
+                onOpenTask={setActiveTask}
+              />
+            )}
+            {view === "calendar" && (
+              <CalendarView tasks={tasks} staff={staff} onTaskSelect={setActiveTask} />
+            )}
+            {view === "properties" && (
+              <PropertiesView properties={properties} staff={staff} tasks={tasks} teamId={teamId} />
+            )}
             {view === "team" && <TeamView staff={staff} teamId={teamId} />}
-            {view === "settings" && <SettingsView authUser={authUser} teamId={teamId} settings={appSettings || {}} existingTasks={tasks} existingProperties={properties} />}
-            {view === "chat" && <TeamChat teamId={teamId} authUser={authUser} staff={staff} />}
+            {view === "settings" && (
+              <SettingsView
+                authUser={authUser}
+                teamId={teamId}
+                settings={appSettings || {}}
+                existingTasks={tasks}
+                existingProperties={properties}
+              />
+            )}
+            {view === "chat" && (
+              <AdminChat teamId={teamId} authUser={authUser} staff={staff} />
+            )}
           </div>
         </div>
       </main>
 
-      {/* Modals werden später wieder hinzugefügt */}
+      {activeTask && (
+        <TaskModal
+          task={activeTask}
+          staff={staff}
+          teamId={teamId}
+          onClose={() => setActiveTask(null)}
+          onSave={handleTaskUpdate}
+          isSaving={isSavingTask}
+        />
+      )}
     </div>
   );
 }
-
-
-/* ---------------- UI-Komponenten (temporär hier) ---------------- */
 
 const Sidebar = ({ view, setView, sidebarOpen, setSidebarOpen }) => (
   <div
@@ -211,7 +305,7 @@ const Sidebar = ({ view, setView, sidebarOpen, setSidebarOpen }) => (
   >
     <div className="p-6 flex items-center justify-between">
       <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Brush className="text-emerald-400" />
+        <Brush className="text-teal-400" />
         CleanTeam
       </h1>
       <button onClick={() => setSidebarOpen(false)} className="md:hidden">
@@ -220,21 +314,21 @@ const Sidebar = ({ view, setView, sidebarOpen, setSidebarOpen }) => (
     </div>
 
     <nav className="mt-6 px-4 space-y-2">
-      <NavItem icon={<Home size={20} />} label="Einsatzplan" currentView={view} targetView="dashboard" setView={setView} setSidebarOpen={setSidebarOpen} />
+      <NavItem icon={<Home size={20} />} label="Uebersicht" currentView={view} targetView="dashboard" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<Calendar size={20} />} label="Monatskalender" currentView={view} targetView="calendar" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<MapPin size={20} />} label="Objekte" currentView={view} targetView="properties" setView={setView} setSidebarOpen={setSidebarOpen} />
-      <NavItem icon={<Users size={20} />} label="Team & Personal" currentView={view} targetView="team" setView={setView} setSidebarOpen={setSidebarOpen} />
-      <NavItem icon={<Settings size={20} />} label="Einstellungen" currentView={view} targetView="settings" setView={setView} setSidebarOpen={setSidebarOpen} />
+      <NavItem icon={<Users size={20} />} label="Team" currentView={view} targetView="team" setView={setView} setSidebarOpen={setSidebarOpen} />
+      <NavItem icon={<ClipboardList size={20} />} label="Einstellungen" currentView={view} targetView="settings" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<MessageSquare size={20} />} label="Chat" currentView={view} targetView="chat" setView={setView} setSidebarOpen={setSidebarOpen} />
     </nav>
-    
-    <div className="absolute bottom-0 w-full p-4 bg-slate-800/50">
-        <button
-          onClick={signOut}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-slate-800 text-slate-300"
-        >
-          <LogOut size={20} /> <span>Abmelden</span>
-        </button>
+
+    <div className="absolute bottom-0 w-full p-4 bg-slate-800/60">
+      <button
+        onClick={signOut}
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-slate-800 text-slate-300"
+      >
+        <LogOut size={20} /> <span>Abmelden</span>
+      </button>
     </div>
   </div>
 );
@@ -245,83 +339,163 @@ const NavItem = ({ icon, label, currentView, targetView, setView, setSidebarOpen
       setView(targetView);
       setSidebarOpen(false);
     }}
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-      currentView === targetView ? "bg-emerald-600 text-white" : "hover:bg-slate-800 text-slate-300"
+    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+      currentView === targetView ? "bg-teal-600 text-white" : "hover:bg-slate-800 text-slate-300"
     }`}
   >
     {icon} <span>{label}</span>
   </button>
 );
 
+const DashboardView = ({ tasks, staff, onOpenTask }) => {
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [staffFilter, setStaffFilter] = useState("all");
 
-const DashboardView = ({ tasks }) => {
-    const pendingTasks = tasks.filter((t) => t.status === "pending").length;
-    const inProgressTasks = tasks.filter((t) => t.status === "in-progress").length;
-    const completedTasks = tasks.filter((t) => t.status === "completed").length;
-  
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-800">Einsatzplanung</h2>
-            <p className="text-slate-500">Übersicht aller Check-outs und Reinigungen deines Teams.</p>
-          </div>
+  const safeTasks = safeArray(tasks);
+  const safeStaff = safeArray(staff);
+
+  const filteredTasks = safeTasks
+    .filter((task) => (statusFilter === "all" ? true : task.status === statusFilter))
+    .filter((task) => {
+      if (staffFilter === "all") return true;
+      const assignedIds = Array.isArray(task.assignedTo) ? task.assignedTo : task.assignedTo ? [task.assignedTo] : [];
+      return assignedIds.includes(staffFilter);
+    })
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  const pendingCount = safeTasks.filter((t) => t.status === "pending").length;
+  const inProgressCount = safeTasks.filter((t) => t.status === "in-progress").length;
+  const completedCount = safeTasks.filter((t) => t.status === "completed").length;
+  const todayTasks = safeTasks.filter((t) => t.date === todayISO());
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900">Uebersicht</h2>
+          <p className="text-slate-500">Tagesstatus und Aufgaben im Blick.</p>
         </div>
-  
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <StatCard icon={<Brush size={24} />} title="Offen" value={pendingTasks} color="blue" />
-          <StatCard icon={<AlertTriangle size={24} />} title="In Arbeit" value={inProgressTasks} color="yellow" />
-          <StatCard icon={<CheckCircle size={24} />} title="Erledigt" value={completedTasks} color="green" />
-        </div>
-  
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="font-semibold text-slate-800">Alle Aufgaben</h3>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard icon={<Brush size={22} />} title="Offen" value={pendingCount} color="bg-slate-900" />
+        <StatCard icon={<AlertTriangle size={22} />} title="In Arbeit" value={inProgressCount} color="bg-amber-500" />
+        <StatCard icon={<CheckCircle size={22} />} title="Erledigt" value={completedCount} color="bg-emerald-600" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Aufgabenliste</h3>
+              <p className="text-xs text-slate-500">Filtere nach Status oder Teammitglied.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "all", label: "Alle" },
+                { id: "pending", label: "Offen" },
+                { id: "in-progress", label: "In Arbeit" },
+                { id: "completed", label: "Erledigt" },
+              ].map((filter) => (
+                <button
+                  key={filter.id}
+                  onClick={() => setStatusFilter(filter.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                    statusFilter === filter.id
+                      ? "bg-teal-600 text-white border-teal-600"
+                      : "bg-white border-slate-200 text-slate-500"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+              <select
+                value={staffFilter}
+                onChange={(e) => setStaffFilter(e.target.value)}
+                className="px-3 py-1.5 rounded-full text-xs font-semibold border border-slate-200 text-slate-600 bg-white"
+              >
+                <option value="all">Alle Mitarbeiter</option>
+                {safeStaff.map((member) => (
+                  <option key={member.id} value={member.id}>{member.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="divide-y divide-slate-100">
-            {tasks.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">
-                Keine Aufgaben gefunden. Führe einen Sync in den Einstellungen durch.
-              </div>
+            {filteredTasks.length === 0 ? (
+              <div className="p-8 text-center text-slate-500">Keine Aufgaben gefunden.</div>
             ) : (
-              tasks.map((task) => (
-                <div key={task.id} className="p-4 hover:bg-slate-50">
-                  <h4 className="font-semibold">{task.apartment}</h4>
-                  <p className="text-sm text-slate-500">{task.date}</p>
-                </div>
-              ))
+              filteredTasks.map((task) => {
+                const assignedIds = Array.isArray(task.assignedTo) ? task.assignedTo : task.assignedTo ? [task.assignedTo] : [];
+                return (
+                  <div key={task.id} className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-slate-400">{task.date || "Kein Datum"}</p>
+                      <h4 className="text-lg font-semibold text-slate-900">{task.apartment || "Ohne Titel"}</h4>
+                      <p className="text-xs text-slate-500">Status: {statusLabel(task.status)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex -space-x-2">
+                        {assignedIds.map((id) => {
+                          const member = safeStaff.find((s) => s.id === id);
+                          if (!member) return null;
+                          return (
+                            <div
+                              key={id}
+                              title={member.name}
+                              className={`w-8 h-8 rounded-full border-2 border-white ${member.color || "bg-slate-400"} flex items-center justify-center text-white text-xs font-bold`}
+                            >
+                              {member.name?.charAt(0) || "?"}
+                            </div>
+                          );
+                        })}
+                        {assignedIds.length === 0 && <span className="text-xs text-slate-400 italic">Unzugewiesen</span>}
+                      </div>
+                      <button
+                        onClick={() => onOpenTask(task)}
+                        className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800"
+                      >
+                        Bearbeiten
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
-      </div>
-    );
-};
-  
-const StatCard = ({ icon, title, value, color }) => {
-    const colors = {
-      blue: "bg-blue-100 text-blue-600",
-      yellow: "bg-yellow-100 text-yellow-600",
-      green: "bg-green-100 text-green-600",
-    };
-  
-    return (
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
-        <div className={`p-3 rounded-full ${colors[color]}`}>
-          {icon}
-        </div>
-        <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <p className="text-2xl font-bold text-slate-800">{value}</p>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5 space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">Heute</h3>
+          {todayTasks.length === 0 && <p className="text-sm text-slate-500">Keine Aufgaben fuer heute.</p>}
+          {todayTasks.map((task) => (
+            <div key={task.id} className="p-3 rounded-2xl border border-slate-100 bg-slate-50">
+              <p className="text-xs text-slate-400">{statusLabel(task.status)}</p>
+              <p className="font-semibold text-slate-800">{task.apartment}</p>
+              <button onClick={() => onOpenTask(task)} className="text-xs text-teal-600 mt-1">Details</button>
+            </div>
+          ))}
         </div>
       </div>
-    );
+    </div>
+  );
 };
+
+const StatCard = ({ icon, title, value, color }) => (
+  <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4">
+    <div className={`p-3 rounded-2xl text-white ${color}`}>{icon}</div>
+    <div>
+      <p className="text-sm text-slate-500">{title}</p>
+      <p className="text-2xl font-bold text-slate-900">{value}</p>
+    </div>
+  </div>
+);
 
 const DEFAULT_CHECKLIST = [
   "Bettwaesche gewechselt",
-  "Muell entsorgt & Neue Beutel",
-  "Bad & Kueche desinfiziert",
-  "Boeden gesaugt & gewischt",
+  "Muell entsorgt und neue Beutel",
+  "Bad und Kueche desinfiziert",
+  "Boeden gesaugt und gewischt",
   "Oberflaechen abgestaubt",
 ];
 
@@ -330,43 +504,56 @@ const StaffView = ({
   staff,
   authUser,
   onStatusChange,
+  onStartTask,
+  onCompleteTask,
   onPhotoUpload,
   uploadingTask,
   onImageSelect,
+  onChecklistToggle,
   teamId,
 }) => {
-  const me = staff.find((member) => member.id === authUser.uid);
-  const myName = me?.name || authUser.email || "Staff";
-  const myTasks = tasks
+  const safeTasks = safeArray(tasks);
+  const safeStaff = safeArray(staff);
+  const me = safeStaff.find((member) => member.id === authUser.uid);
+  const myName = me?.name || authUser.email || "Team";
+  const myTasks = safeTasks
     .filter((task) => {
-      if (Array.isArray(task.assignedTo)) {
-        return task.assignedTo.includes(authUser.uid);
-      }
-      return task.assignedTo === authUser.uid;
+      const assignedIds = Array.isArray(task.assignedTo) ? task.assignedTo : task.assignedTo ? [task.assignedTo] : [];
+      return assignedIds.includes(authUser.uid);
     })
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
+  const [statusFilter, setStatusFilter] = useState("pending");
+
   const pendingCount = myTasks.filter((t) => t.status === "pending").length;
+  const inProgressCount = myTasks.filter((t) => t.status === "in-progress").length;
   const completedCount = myTasks.filter((t) => t.status === "completed").length;
+  const totalCount = myTasks.length;
+  const progress = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+
+  const filteredTasks = myTasks.filter((task) => {
+    if (statusFilter === "all") return true;
+    return task.status === statusFilter;
+  });
 
   const PhotoSection = ({ title, type, task }) => {
     const photos = task.photos?.[type] || [];
     const isUploading = uploadingTask === task.id;
 
     return (
-      <div className="mb-4">
+      <div>
         <h4 className="text-sm font-semibold text-slate-600 mb-2">{title}</h4>
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className="flex flex-wrap gap-2">
           {photos.map((src, idx) => (
             <img
               key={idx}
               src={src}
-              className="w-16 h-16 object-cover rounded border border-slate-200"
+              className="w-20 h-20 object-cover rounded-xl border border-slate-200"
               alt={type}
               onClick={() => onImageSelect(src)}
             />
           ))}
-          <label className={`w-16 h-16 flex items-center justify-center border-2 border-dashed border-slate-300 rounded cursor-pointer hover:bg-slate-50 ${isUploading ? "opacity-50 cursor-wait" : ""}`}>
+          <label className={`w-20 h-20 flex items-center justify-center border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-50 ${isUploading ? "opacity-50 cursor-wait" : ""}`}>
             <input
               type="file"
               accept="image/*"
@@ -382,141 +569,213 @@ const StaffView = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-20">
-      <div className="p-6 bg-slate-900 text-white shadow-lg rounded-b-3xl mb-6">
+    <div className="min-h-screen bg-slate-100 pb-16">
+      <div className="p-6 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white shadow-lg rounded-b-[2.5rem] mb-6">
         <div className="flex justify-between items-start">
           <div>
-            <p className="text-slate-300 text-sm mb-1">Hello,</p>
+            <p className="text-slate-300 text-sm mb-1">Guten Tag,</p>
             <h1 className="text-3xl font-bold">{myName}</h1>
+            <p className="text-slate-400 text-sm">{new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long" })}</p>
           </div>
-          <button onClick={signOut} className="bg-white/20 p-2 rounded-lg backdrop-blur-sm hover:bg-white/30">
+          <button onClick={signOut} className="bg-white/10 p-2 rounded-xl backdrop-blur-sm hover:bg-white/20">
             <LogOut size={20} />
           </button>
         </div>
-        <div className="mt-6 flex gap-4">
-          <div className="bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm">
-            <p className="text-2xl font-bold">{pendingCount}</p>
-            <p className="text-xs text-slate-300">Open</p>
+        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatPill label="Offen" value={pendingCount} />
+          <StatPill label="In Arbeit" value={inProgressCount} />
+          <StatPill label="Erledigt" value={completedCount} />
+          <StatPill label="Gesamt" value={totalCount} />
+        </div>
+        <div className="mt-4">
+          <div className="flex justify-between text-xs text-slate-300">
+            <span>Fortschritt</span>
+            <span>{progress}%</span>
           </div>
-          <div className="bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm">
-            <p className="text-2xl font-bold">{completedCount}</p>
-            <p className="text-xs text-slate-300">Done</p>
+          <div className="h-2 bg-white/20 rounded-full mt-2">
+            <div className="h-2 bg-teal-400 rounded-full" style={{ width: `${progress}%` }}></div>
           </div>
         </div>
       </div>
 
-      <div className="px-4 space-y-4">
-        <h2 className="font-bold text-slate-700 ml-1">Your tasks</h2>
-        {myTasks.length === 0 ? (
-          <div className="bg-white p-8 rounded-2xl text-center shadow-sm">
-            <CheckCircle size={32} className="mx-auto text-green-500 mb-3" />
-            <h3 className="font-bold text-slate-800">All done!</h3>
+      <div className="px-4 space-y-6">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "pending", label: `Offen (${pendingCount})` },
+            { id: "in-progress", label: `In Arbeit (${inProgressCount})` },
+            { id: "completed", label: `Erledigt (${completedCount})` },
+            { id: "all", label: `Alle (${totalCount})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-4 py-2 rounded-full text-sm font-semibold border ${
+                statusFilter === tab.id
+                  ? "bg-teal-600 text-white border-teal-600"
+                  : "bg-white border-slate-200 text-slate-600"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {filteredTasks.length === 0 ? (
+          <div className="bg-white p-8 rounded-3xl text-center shadow-sm">
+            <CheckCircle size={32} className="mx-auto text-emerald-500 mb-3" />
+            <h3 className="font-bold text-slate-800">Keine Aufgaben in dieser Ansicht</h3>
+            <p className="text-sm text-slate-500">Wechsle den Filter oder warte auf neue Aufgaben.</p>
           </div>
         ) : (
-          myTasks.map((task) => (
-            <div key={task.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-100">
-              <div className="p-5">
-                <div className="flex justify-between items-start mb-2">
-                  <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${task.status === "completed" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>
-                    {task.status === "pending" ? "To Do" : task.status === "in-progress" ? "In Progress" : "Done"}
-                  </span>
-                  <span className="text-sm text-slate-400">{formatDate(task.date)}</span>
-                </div>
-                <h3 className="text-lg font-bold text-slate-800 mb-1">{task.apartment}</h3>
-                {task.guestName && <p className="text-sm text-slate-500 mb-4">Guest: {task.guestName}</p>}
-
-                {task.notes && (
-                  <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm mb-4">
-                    <strong>Note:</strong> {task.notes}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {filteredTasks.map((task) => (
+              <div key={task.id} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-5 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-xs text-slate-400">{task.date || "Kein Datum"}</p>
+                      <h3 className="text-lg font-bold text-slate-800">{task.apartment}</h3>
+                      {task.guestName && <p className="text-sm text-slate-500">Gast: {task.guestName}</p>}
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${statusBadge(task.status)}`}>
+                      {statusLabel(task.status)}
+                    </span>
                   </div>
-                )}
 
-                {task.status !== "completed" && (
-                  <div className="space-y-4 mb-6 border-t border-slate-100 pt-4">
-                    <PhotoSection title="Before photos (issues)" type="before" task={task} />
-                    {task.status === "in-progress" && <PhotoSection title="After photos" type="after" task={task} />}
+                  {task.notes && (
+                    <div className="bg-amber-50 text-amber-800 p-3 rounded-xl text-sm">
+                      <strong>Notiz:</strong> {task.notes}
+                    </div>
+                  )}
 
+                  {task.issueReport && (
+                    <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm">
+                      <strong>Problem gemeldet:</strong> {task.issueReport}
+                    </div>
+                  )}
+
+                  {task.status !== "completed" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <PhotoSection title="Vorher-Fotos" type="before" task={task} />
+                      {task.status === "in-progress" && (
+                        <PhotoSection title="Nachher-Fotos" type="after" task={task} />
+                      )}
+                    </div>
+                  )}
+
+                  {task.status !== "completed" && (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Checklist</p>
-                      {(task.checklist || DEFAULT_CHECKLIST).map((item, idx) => (
-                        <label key={idx} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                          <input type="checkbox" className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" />
-                          <span className="text-slate-700 text-sm">{item}</span>
-                        </label>
-                      ))}
+                      <p className="text-xs font-semibold text-slate-500 uppercase">Checkliste</p>
+                      {(task.checklist || DEFAULT_CHECKLIST).map((item, idx) => {
+                        const done = safeArray(task.checklistDone).includes(idx);
+                        return (
+                          <label key={idx} className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={done}
+                              onChange={() => onChecklistToggle(task, idx)}
+                              className="w-5 h-5 text-teal-600 rounded focus:ring-teal-500"
+                            />
+                            <span className={`text-slate-700 text-sm ${done ? "line-through text-slate-400" : ""}`}>{item}</span>
+                          </label>
+                        );
+                      })}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="flex gap-2 mt-2">
-                  {task.status === "pending" && (
-                    <button
-                      onClick={() => onStatusChange(task.id, "in-progress")}
-                      className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-semibold shadow-blue-200 shadow-lg active:scale-95 transition-transform"
-                    >
-                      Start cleaning
-                    </button>
-                  )}
-                  {task.status === "in-progress" && (
-                    <>
+                  <div className="flex flex-wrap gap-2">
+                    {task.status === "pending" && (
                       <button
-                        onClick={() => {
-                          const issue = window.prompt("Report an issue");
-                          if (issue) onStatusChange(task.id, "in-progress", issue);
-                        }}
-                        className="px-4 bg-red-100 text-red-600 rounded-xl font-medium"
+                        onClick={() => onStartTask(task)}
+                        className="flex-1 min-w-[160px] bg-blue-600 text-white py-3 rounded-xl font-semibold shadow-blue-200 shadow-lg active:scale-95 transition-transform"
                       >
-                        <AlertTriangle size={20} />
+                        Starten
                       </button>
-                      <button
-                        onClick={() => onStatusChange(task.id, "completed")}
-                        className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-semibold shadow-emerald-200 shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
-                      >
-                        <CheckCircle size={20} /> Finish
-                      </button>
-                    </>
-                  )}
-                  {task.status === "completed" && (
-                    <div className="w-full text-center py-2 text-green-600 font-medium bg-green-50 rounded-lg">
-                      Completed
-                    </div>
-                  )}
+                    )}
+                    {task.status === "in-progress" && (
+                      <>
+                        <button
+                          onClick={() => {
+                            const issue = window.prompt("Problem melden");
+                            if (issue) onStatusChange(task.id, "in-progress", issue);
+                          }}
+                          className="px-4 py-3 bg-red-100 text-red-600 rounded-xl font-medium"
+                        >
+                          <AlertTriangle size={20} />
+                        </button>
+                        <button
+                          onClick={() => onCompleteTask(task)}
+                          className="flex-1 min-w-[160px] bg-emerald-600 text-white py-3 rounded-xl font-semibold shadow-emerald-200 shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
+                        >
+                          <CheckCircle size={20} /> Erledigt
+                        </button>
+                      </>
+                    )}
+                    {task.status === "completed" && (
+                      <div className="w-full text-center py-2 text-green-700 font-medium bg-green-50 rounded-xl">
+                        Abgeschlossen
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
-      </div>
 
-      <div className="px-4 mt-8">
-        <TeamChat teamId={teamId} authUser={authUser} staff={staff} />
+        <div className="pt-2">
+          <StaffChat teamId={teamId} authUser={authUser} staff={staff} />
+        </div>
       </div>
     </div>
   );
 };
+
+const StatPill = ({ label, value }) => (
+  <div className="bg-white/15 px-3 py-2 rounded-xl text-center">
+    <p className="text-xl font-bold">{value}</p>
+    <p className="text-xs text-slate-300">{label}</p>
+  </div>
+);
 
 const ImageModal = ({ src, onClose }) => {
   if (!src) return null;
   return (
     <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="relative max-w-4xl w-full flex justify-center">
-        <img src={src} className="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain" alt="Detail" onClick={(e) => e.stopPropagation()} />
+        <img src={src} className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" alt="Detail" onClick={(e) => e.stopPropagation()} />
         <button onClick={onClose} className="absolute -top-12 right-0 text-white hover:text-slate-300 transition-colors bg-white/10 p-2 rounded-full">
-          <X size={24}/>
+          <X size={24} />
         </button>
       </div>
     </div>
   );
 };
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  return new Intl.DateTimeFormat("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  }).format(date);
+const statusLabel = (status) => {
+  switch (status) {
+    case "pending":
+      return "Offen";
+    case "in-progress":
+      return "In Arbeit";
+    case "completed":
+      return "Erledigt";
+    default:
+      return status || "Offen";
+  }
+};
+
+const statusBadge = (status) => {
+  switch (status) {
+    case "pending":
+      return "bg-blue-100 text-blue-700";
+    case "in-progress":
+      return "bg-amber-100 text-amber-700";
+    case "completed":
+      return "bg-green-100 text-green-700";
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
 };
 
 const compressImage = (file) => {
