@@ -1,0 +1,115 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function memberDoc(teamId) {
+      return /databases/$(database)/documents/artifacts/cleanteam-test/teams/$(teamId)/members/$(request.auth.uid);
+    }
+
+    function isTeamMember(teamId) {
+      return isSignedIn() &&
+        (
+          get(/databases/$(database)/documents/artifacts/cleanteam-test/teams/$(teamId))
+            .data.members[request.auth.uid] != null
+          || exists(memberDoc(teamId))
+        );
+    }
+
+    function isTeamOwner(teamId) {
+      return isSignedIn() &&
+        (
+          get(/databases/$(database)/documents/artifacts/cleanteam-test/teams/$(teamId))
+            .data.members[request.auth.uid].role == 'owner'
+          || (exists(memberDoc(teamId)) && get(memberDoc(teamId)).data.role == 'owner')
+        );
+    }
+
+    match /artifacts/cleanteam-test/teams/{teamId} {
+      allow read: if isTeamMember(teamId);
+      // Owner kann das Team ändern; neue Mitglieder können sich selbst zur `members`-Map hinzufügen.
+      allow update: if isTeamOwner(teamId) ||
+        (request.auth.uid != null && // User muss authentifiziert sein
+         request.resource.data.members[request.auth.uid].role == 'staff' && // User fügt sich selbst als Staff hinzu
+         resource.data.members[request.auth.uid] == null); // User war vorher nicht in der Liste
+
+
+      // Team-Erstellung: User muss sich selbst als Owner setzen
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.ownerId
+        && request.resource.data.members[request.auth.uid].role == 'owner';
+
+      // --- Subcollections ---
+      match /members/{memberUid} {
+        allow read: if isTeamMember(teamId) || request.auth.uid == memberUid;
+
+        // FIX: erlaubt erste Owner-Erstellung ohne getAfter, oder das Hinzufügen von sich selbst als Staff
+        allow create: if isTeamOwner(teamId) ||
+          (request.auth.uid == memberUid);
+
+        allow update, delete: if isTeamOwner(teamId);
+      }
+
+      match /config/{docId} {
+        allow read: if isTeamMember(teamId);
+        // Allow initial creation within the team setup batch
+        allow create: if isSignedIn();
+        // Subsequent changes require ownership
+        allow update, delete: if isTeamOwner(teamId);
+      }
+
+      match /tasks/{taskId} {
+        allow read: if isTeamMember(teamId);
+        allow create, delete: if isTeamOwner(teamId);
+        allow update: if isTeamOwner(teamId) ||
+          (isTeamMember(teamId) &&
+           request.auth.uid in resource.data.assignedTo);
+      }
+
+      match /properties/{propId} {
+        allow read: if isTeamMember(teamId);
+        allow write: if isTeamOwner(teamId);
+      }
+
+      match /messages/{messageId} {
+        allow read: if isTeamMember(teamId);
+        allow create: if isTeamMember(teamId);
+        allow update, delete: if isTeamOwner(teamId);
+      }
+    }
+
+    // Collection-Group-Query für members (Login-Auflösung)
+    match /{path=**}/members/{memberUid} {
+      allow read: if isSignedIn() &&
+        resource.data.uid == request.auth.uid;
+    }
+
+    match /artifacts/cleanteam-test/invites/{inviteId} {
+      // Allow anyone to read an invite code, as it's needed for signup before a user is authenticated.
+      // The unguessable ID of the invite document is the secret.
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if isSignedIn();
+    }
+
+    // --- User Profile collection for team lookup ---
+    match /users/{userId} {
+      // A user can read, create and update their own profile document.
+      allow read, update, create: if request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // --- Altes Datenmodell sperren (Migrationsschutz) ---
+    match /artifacts/cleanteam-test/users/{uid}/{allCollections=**} {
+      // Niemand darf mehr in die alte Struktur schreiben.
+      // Das Lesen könnte für die Migration temporär erlaubt bleiben.
+      allow read: if request.auth.uid == uid; // Nur der User selbst für die Migration
+      allow write: if false;
+    }
+  }
+}
