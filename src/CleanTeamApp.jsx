@@ -12,6 +12,7 @@ import TeamView from "./components/views/Team";
 import SettingsView from "./components/views/Settings";
 import CalendarView from "./components/views/CalendarView";
 import PropertiesView from "./components/views/PropertiesView";
+import BillingView from "./components/views/BillingView";
 import TaskModal from "./components/TaskModal";
 import AdminChat from "./components/chat/AdminChat";
 import StaffChat from "./components/chat/StaffChat";
@@ -27,6 +28,7 @@ import {
   MapPin,
   Menu,
   MessageSquare,
+  Receipt,
   RefreshCw,
   Users,
   X,
@@ -266,6 +268,9 @@ export default function CleanTeamApp({ authUser }) {
             {view === "properties" && (
               <PropertiesView properties={properties} staff={staff} tasks={tasks} teamId={teamId} />
             )}
+            {view === "billing" && (
+              <BillingView tasks={tasks} staff={staff} properties={properties} teamId={teamId} />
+            )}
             {view === "team" && <TeamView staff={staff} teamId={teamId} />}
             {view === "settings" && (
               <SettingsView
@@ -320,6 +325,7 @@ const Sidebar = ({ view, setView, sidebarOpen, setSidebarOpen }) => (
       <NavItem icon={<Home size={20} />} label="Uebersicht" currentView={view} targetView="dashboard" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<Calendar size={20} />} label="Monatskalender" currentView={view} targetView="calendar" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<MapPin size={20} />} label="Objekte" currentView={view} targetView="properties" setView={setView} setSidebarOpen={setSidebarOpen} />
+      <NavItem icon={<Receipt size={20} />} label="Abrechnungen" currentView={view} targetView="billing" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<Users size={20} />} label="Team" currentView={view} targetView="team" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<ClipboardList size={20} />} label="Einstellungen" currentView={view} targetView="settings" setView={setView} setSidebarOpen={setSidebarOpen} />
       <NavItem icon={<MessageSquare size={20} />} label="Chat" currentView={view} targetView="chat" setView={setView} setSidebarOpen={setSidebarOpen} />
