@@ -144,7 +144,7 @@ export default function TaskModal({
   return (
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-100"
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] border border-slate-100 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between p-6 border-b border-slate-100">
@@ -158,7 +158,7 @@ export default function TaskModal({
           </button>
         </div>
 
-        <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-y-auto">
           <div className="space-y-4">
             <div>
               <label className="text-sm font-semibold text-slate-700">Status</label>
