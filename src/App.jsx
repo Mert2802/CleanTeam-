@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import Login from "./auth/Login";
 import CleanTeamApp from "./CleanTeamApp";
+import { enablePushNotifications } from "./lib/notifications";
 
 const PERMISSION_DEFAULT = "default";
 
@@ -9,42 +10,42 @@ const PermissionsGate = ({ children }) => {
   const [locationStatus, setLocationStatus] = useState(PERMISSION_DEFAULT);
   const [notificationStatus, setNotificationStatus] = useState(PERMISSION_DEFAULT);
 
+  const syncStatuses = useCallback(async () => {
+    if (typeof Notification !== "undefined") {
+      setNotificationStatus(Notification.permission);
+    } else {
+      setNotificationStatus("unsupported");
+    }
+
+    if (!("geolocation" in navigator)) {
+      setLocationStatus("unsupported");
+      return;
+    }
+
+    if (navigator.permissions?.query) {
+      try {
+        const status = await navigator.permissions.query({ name: "geolocation" });
+        setLocationStatus(status.state);
+        status.onchange = () => {
+          setLocationStatus(status.state);
+        };
+        return;
+      } catch (err) {
+        console.warn("Geolocation permission check failed:", err);
+      }
+    }
+
+    setLocationStatus(PERMISSION_DEFAULT);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-
-    const syncStatuses = async () => {
-      if (typeof Notification !== "undefined") {
-        setNotificationStatus(Notification.permission);
-      } else {
-        setNotificationStatus("unsupported");
-      }
-
-      if (!("geolocation" in navigator)) {
-        setLocationStatus("unsupported");
-        return;
-      }
-
-      if (navigator.permissions?.query) {
-        try {
-          const status = await navigator.permissions.query({ name: "geolocation" });
-          if (mounted) setLocationStatus(status.state);
-          status.onchange = () => {
-            if (mounted) setLocationStatus(status.state);
-          };
-          return;
-        } catch (err) {
-          console.warn("Geolocation permission check failed:", err);
-        }
-      }
-
-      setLocationStatus(PERMISSION_DEFAULT);
-    };
-
+    if (!mounted) return () => {};
     syncStatuses();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [syncStatuses]);
 
   const requestLocation = () =>
     new Promise((resolve) => {
@@ -118,11 +119,17 @@ const PermissionsGate = ({ children }) => {
           >
             Mitteilungen erlauben
           </button>
+          <button
+            onClick={syncStatuses}
+            className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+          >
+            Status neu pruefen
+          </button>
         </div>
 
         <p className="text-xs text-slate-500">
           Falls du abgelehnt hast, aendere die Berechtigungen in den Browser- bzw. iOS-Einstellungen
-          und lade die App neu.
+          und lade die App neu. iOS: Einstellungen &gt; CleanTeam &gt; Standort/Mitteilungen.
         </p>
       </div>
     </div>
@@ -131,6 +138,16 @@ const PermissionsGate = ({ children }) => {
 
 const App = () => {
   const { authUser, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authUser?.uid) return;
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission !== "granted") return;
+
+    enablePushNotifications({ uid: authUser.uid }).catch((err) => {
+      console.error("Push Aktivierung fehlgeschlagen:", err);
+    });
+  }, [authUser?.uid]);
 
   if (isLoading) {
     return (
