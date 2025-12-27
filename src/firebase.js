@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 // Deine Firebase-Konfiguration.
 // Diese Werte findest du in deiner Firebase-Projektübersicht.
@@ -14,11 +15,12 @@ const firebaseConfig = {
 };
 
 // Firebase-App initialisieren
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 
 // Firebase-Dienste exportieren
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const functions = getFunctions(app);
 
 // Globale App-ID für die Firestore-Pfade
 export const appId = "cleanteam-test";

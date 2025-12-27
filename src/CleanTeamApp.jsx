@@ -246,7 +246,8 @@ export default function CleanTeamApp({ authUser }) {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <div className="md:hidden bg-white/80 backdrop-blur p-4 flex items-center justify-between border-b border-slate-200">
           <h1 className="font-bold text-lg flex items-center gap-2">
-            <Brush className="text-teal-600" /> CleanTeam
+            <img src={`${import.meta.env.DEV ? "/" : import.meta.env.BASE_URL}cleanteam-icon.svg`} alt="CleanTeam" className="h-6 w-6" />
+            CleanTeam
           </h1>
           <button onClick={() => setSidebarOpen(true)} className="p-2 text-slate-600">
             <Menu size={24} />
@@ -313,7 +314,7 @@ const Sidebar = ({ view, setView, sidebarOpen, setSidebarOpen }) => (
   >
     <div className="p-6 flex items-center justify-between">
       <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Brush className="text-teal-400" />
+        <img src={`${import.meta.env.DEV ? "/" : import.meta.env.BASE_URL}cleanteam-icon.svg`} alt="CleanTeam" className="h-7 w-7" />
         CleanTeam
       </h1>
       <button onClick={() => setSidebarOpen(false)} className="md:hidden">

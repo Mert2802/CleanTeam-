@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Save, RefreshCw, Server, Clock, AlertTriangle, HardDriveUpload } from "lucide-react";
+import { Save, RefreshCw, Server, Clock, AlertTriangle, HardDriveUpload, Bell } from "lucide-react";
 import { doc, setDoc } from "firebase/firestore";
 import { db, appId } from "../../firebase";
 import { syncWithSmoobu } from "../../lib/smoobu";
 import { migrateData } from "../../lib/migration";
 import { repairTeamLinks } from "../../lib/repair";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../../firebase";
+import { disablePushNotifications, enablePushNotifications, isPushSupported } from "../../lib/notifications";
 
 export default function SettingsView({ authUser, teamId, settings: initialSettings, existingTasks, existingProperties }) {
   const [settings, setSettings] = useState(initialSettings || {});
@@ -13,10 +16,28 @@ export default function SettingsView({ authUser, teamId, settings: initialSettin
   const [isMigrating, setIsMigrating] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [feedback, setFeedback] = useState({ message: "", error: false });
+  const [pushFeedback, setPushFeedback] = useState({ message: "", error: false });
+  const [pushInfo, setPushInfo] = useState({ supported: false, permission: "default" });
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
+  const [isDisablingPush, setIsDisablingPush] = useState(false);
+  const [isTestingPush, setIsTestingPush] = useState(false);
 
   useEffect(() => {
     setSettings(initialSettings || {});
   }, [initialSettings]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      const supported = await isPushSupported();
+      const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
+      if (mounted) setPushInfo({ supported, permission });
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleSave = async () => {
     if (!teamId) return;
@@ -64,6 +85,72 @@ export default function SettingsView({ authUser, teamId, settings: initialSettin
     const result = await repairTeamLinks({ teamId });
     setFeedback({ message: result.message, error: !result.success });
     setIsRepairing(false);
+  };
+
+  const handleEnablePush = async () => {
+    if (!authUser?.uid) return;
+    setIsEnablingPush(true);
+    setPushFeedback({ message: "", error: false });
+    const result = await enablePushNotifications({ uid: authUser.uid });
+    const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
+    setPushInfo((prev) => ({ ...prev, permission }));
+    if (!result.ok) {
+      const message = result.reason === "missing-vapid-key"
+        ? "VAPID Key fehlt. Setze VITE_FIREBASE_VAPID_KEY."
+        : result.reason === "permission-denied"
+          ? "Mitteilungen wurden nicht erlaubt."
+          : result.reason === "service-worker-register-failed"
+            ? "Service Worker konnte nicht registriert werden."
+            : result.reason === "service-worker-timeout"
+              ? "Service Worker ist nicht bereit. Bitte Seite neu laden."
+          : result.reason === "unsupported"
+            ? "Push wird auf diesem Geraet nicht unterstuetzt."
+            : "Mitteilungen konnten nicht aktiviert werden.";
+      setPushFeedback({ message, error: true });
+      setIsEnablingPush(false);
+      return;
+    }
+    setPushFeedback({ message: "Mitteilungen aktiviert.", error: false });
+    setIsEnablingPush(false);
+  };
+
+  const handleDisablePush = async () => {
+    if (!authUser?.uid) return;
+    setIsDisablingPush(true);
+    setPushFeedback({ message: "", error: false });
+    const result = await disablePushNotifications({ uid: authUser.uid });
+    if (!result.ok) {
+      const message = result.reason === "missing-vapid-key"
+        ? "VAPID Key fehlt. Setze VITE_FIREBASE_VAPID_KEY."
+        : result.reason === "service-worker-register-failed"
+          ? "Service Worker konnte nicht registriert werden."
+          : result.reason === "service-worker-timeout"
+            ? "Service Worker ist nicht bereit. Bitte Seite neu laden."
+        : result.reason === "unsupported"
+          ? "Push wird auf diesem Geraet nicht unterstuetzt."
+          : "Mitteilungen konnten nicht deaktiviert werden.";
+      setPushFeedback({ message, error: true });
+      setIsDisablingPush(false);
+      return;
+    }
+    setPushFeedback({ message: "Mitteilungen deaktiviert.", error: false });
+    setIsDisablingPush(false);
+  };
+
+  const handleTestPush = async () => {
+    if (!authUser?.uid) return;
+    setIsTestingPush(true);
+    setPushFeedback({ message: "", error: false });
+    try {
+      const callable = httpsCallable(functions, "sendTestPush");
+      await callable({});
+      setPushFeedback({ message: "Test-Push gesendet.", error: false });
+    } catch (err) {
+      console.error(err);
+      setPushFeedback({ message: "Test-Push fehlgeschlagen.", error: true });
+    } finally {
+      setIsTestingPush(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -164,6 +251,52 @@ export default function SettingsView({ authUser, teamId, settings: initialSettin
           >
             <RefreshCw size={18} className={isSyncing ? "animate-spin" : ""} />
             {isSyncing ? "Lade Daten..." : "Manueller Sync"}
+          </button>
+        </div>
+      </div>
+
+      <div className={`bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4 transition-opacity ${!teamId ? "opacity-50 cursor-not-allowed" : ""}`}>
+        <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
+          <Bell size={18} /> Mitteilungen
+        </h3>
+
+        {pushFeedback.message && (
+          <div className={`p-3 rounded-xl text-sm border flex items-center gap-2 ${
+            pushFeedback.error
+              ? "bg-red-50 text-red-700 border-red-200"
+              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+          }`}>
+            <AlertTriangle size={16} /> {pushFeedback.message}
+          </div>
+        )}
+
+        <div className="text-sm text-slate-600 space-y-1">
+          <p>Status: {pushInfo.supported ? "unterstuetzt" : "nicht unterstuetzt"} / {pushInfo.permission}</p>
+          <p>iOS: Push funktioniert nur als installierte App (Safari &gt; Teilen &gt; Zum Home-Bildschirm).</p>
+        </div>
+
+        <div className="pt-2 flex flex-wrap gap-2">
+          <button
+            onClick={handleEnablePush}
+            disabled={!teamId || isEnablingPush || !pushInfo.supported}
+            className="px-6 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 flex items-center gap-2 disabled:opacity-50"
+          >
+            <Bell size={18} />
+            {isEnablingPush ? "Aktiviere..." : "Mitteilungen aktivieren"}
+          </button>
+          <button
+            onClick={handleDisablePush}
+            disabled={!teamId || isDisablingPush || !pushInfo.supported}
+            className="px-6 py-2 bg-slate-200 text-slate-800 rounded-xl hover:bg-slate-300 flex items-center gap-2 disabled:opacity-50"
+          >
+            {isDisablingPush ? "Deaktiviere..." : "Mitteilungen deaktivieren"}
+          </button>
+          <button
+            onClick={handleTestPush}
+            disabled={!teamId || isTestingPush || !pushInfo.supported || pushInfo.permission !== "granted"}
+            className="px-6 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 flex items-center gap-2 disabled:opacity-50"
+          >
+            {isTestingPush ? "Sende..." : "Test-Push senden"}
           </button>
         </div>
       </div>
