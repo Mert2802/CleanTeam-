@@ -289,11 +289,13 @@ export default function CleanTeamApp({ authUser }) {
           staff={staff}
           teamId={teamId}
           properties={properties}
+          onImageSelect={setSelectedImage}
           onClose={() => setActiveTask(null)}
           onSave={handleTaskUpdate}
           isSaving={isSavingTask}
         />
       )}
+      <ImageModal src={selectedImage} onClose={() => setSelectedImage(null)} />
     </div>
   );
 }

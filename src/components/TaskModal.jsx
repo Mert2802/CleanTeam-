@@ -65,6 +65,7 @@ export default function TaskModal({
   staff,
   teamId,
   properties,
+  onImageSelect,
   onClose,
   onSave,
   isSaving,
@@ -144,7 +145,7 @@ export default function TaskModal({
   return (
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] border border-slate-100 flex flex-col"
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[90vh] border border-slate-100 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between p-6 border-b border-slate-100">
@@ -158,7 +159,7 @@ export default function TaskModal({
           </button>
         </div>
 
-        <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-y-auto">
+        <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-y-auto overscroll-contain min-h-0 flex-1">
           <div className="space-y-4">
             <div>
               <label className="text-sm font-semibold text-slate-700">Status</label>
@@ -370,7 +371,7 @@ export default function TaskModal({
                       src={src}
                       alt="Vorher"
                       className="w-24 h-24 rounded-xl object-cover border border-slate-200 cursor-pointer"
-                      onClick={() => window.open(src, "_blank")}
+                      onClick={() => onImageSelect?.(src)}
                     />
                   ))}
                 </div>
@@ -387,7 +388,7 @@ export default function TaskModal({
                       src={src}
                       alt="Nachher"
                       className="w-24 h-24 rounded-xl object-cover border border-slate-200 cursor-pointer"
-                      onClick={() => window.open(src, "_blank")}
+                      onClick={() => onImageSelect?.(src)}
                     />
                   ))}
                 </div>
