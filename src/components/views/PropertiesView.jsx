@@ -24,6 +24,8 @@ export default function PropertiesView({ properties, staff, teamId, tasks }) {
       await updateDoc(propRef, {
         defaultStaff: safeArray(prop.defaultStaff),
         checklist: safeArray(prop.checklist).length ? safeArray(prop.checklist) : DEFAULT_CHECKLIST,
+        lat: typeof prop.lat === "number" ? prop.lat : null,
+        lng: typeof prop.lng === "number" ? prop.lng : null,
       });
 
       const isUnassigned = (assignedTo) => {
@@ -116,6 +118,16 @@ export default function PropertiesView({ properties, staff, teamId, tasks }) {
                     <span className="text-orange-500 flex items-center gap-1"><AlertTriangle size={12} /> Standort fehlt</span>
                   )}
                 </div>
+                {typeof prop.lat === "number" && typeof prop.lng === "number" && (
+                  <a
+                    className="text-teal-600 hover:text-teal-700"
+                    href={`https://www.openstreetmap.org/?mlat=${prop.lat}&mlon=${prop.lng}#map=18/${prop.lat}/${prop.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Karte oeffnen
+                  </a>
+                )}
               </div>
 
               <div>
@@ -141,9 +153,22 @@ export default function PropertiesView({ properties, staff, teamId, tasks }) {
   );
 }
 
+const parseCoord = (value) => {
+  if (value === "" || value == null) return null;
+  const normalized = String(value).trim().replace(",", ".");
+  const num = Number.parseFloat(normalized);
+  return Number.isFinite(num) ? num : null;
+};
+
 const PropertyEditView = ({ property, staff, onClose, onSave, isSaving }) => {
   const [editedProp, setEditedProp] = useState(property);
   const [checklistInput, setChecklistInput] = useState("");
+  const [latInput, setLatInput] = useState(
+    typeof property.lat === "number" ? String(property.lat) : ""
+  );
+  const [lngInput, setLngInput] = useState(
+    typeof property.lng === "number" ? String(property.lng) : ""
+  );
 
   const toggleStaffSelection = (staffId) => {
     const current = safeArray(editedProp.defaultStaff);
@@ -166,6 +191,27 @@ const PropertyEditView = ({ property, staff, onClose, onSave, isSaving }) => {
     setEditedProp((prev) => ({ ...prev, checklist: newChecklist }));
   };
 
+  const setLocation = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLatInput(String(lat));
+        setLngInput(String(lng));
+        setEditedProp((prev) => ({
+          ...prev,
+          lat,
+          lng,
+        }));
+      },
+      (err) => {
+        console.error("Geolocation Fehler:", err);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   return (
     <div className="bg-white rounded-3xl shadow-xl border border-slate-200 p-6 animate-in fade-in">
       <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
@@ -174,7 +220,7 @@ const PropertyEditView = ({ property, staff, onClose, onSave, isSaving }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div>
+        <div className="space-y-6">
           <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Users size={18} /> Stamm-Team</h4>
           <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-100 rounded-2xl p-3">
             {staff.map((s) => (
@@ -190,6 +236,56 @@ const PropertyEditView = ({ property, staff, onClose, onSave, isSaving }) => {
               </div>
             ))}
             {staff.length === 0 && <p className="text-sm text-slate-400 italic">Kein Personal vorhanden.</p>}
+          </div>
+          <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-slate-700 flex items-center gap-2"><MapPin size={18} /> Standort</h4>
+              <button onClick={setLocation} className="text-xs text-teal-600 hover:text-teal-700">Vom Geraet uebernehmen</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-500">Breitengrad (Lat)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={latInput}
+                  onChange={(e) => {
+                    setLatInput(e.target.value);
+                    setEditedProp((prev) => ({
+                      ...prev,
+                      lat: parseCoord(e.target.value),
+                    }));
+                  }}
+                  className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500">Laengengrad (Lng)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={lngInput}
+                  onChange={(e) => {
+                    setLngInput(e.target.value);
+                    setEditedProp((prev) => ({
+                      ...prev,
+                      lng: parseCoord(e.target.value),
+                    }));
+                  }}
+                  className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                />
+              </div>
+            </div>
+            {typeof editedProp.lat === "number" && typeof editedProp.lng === "number" && (
+              <a
+                className="text-xs text-teal-600 hover:text-teal-700"
+                href={`https://www.openstreetmap.org/?mlat=${editedProp.lat}&mlon=${editedProp.lng}#map=18/${editedProp.lat}/${editedProp.lng}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Karte oeffnen
+              </a>
+            )}
           </div>
         </div>
         <div>

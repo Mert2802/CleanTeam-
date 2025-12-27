@@ -32,6 +32,11 @@ export default function Login() {
     if (invite) {
       setIsLogin(false);
       setInviteCode(invite);
+      try {
+        window.sessionStorage.setItem("pendingInvite", invite);
+      } catch {
+        // ignore
+      }
     }
   }, []);
 
@@ -44,6 +49,11 @@ export default function Login() {
       if (isLogin) {
         await signIn(email, password);
       } else {
+        try {
+          window.sessionStorage.setItem("pendingInvite", inviteCode);
+        } catch {
+          // ignore
+        }
         await signUpWithInvite(email, password, inviteCode);
       }
     } catch (err) {

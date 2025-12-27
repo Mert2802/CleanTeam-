@@ -19,6 +19,22 @@ import {
 import { auth, db, appId } from "../firebase";
 import { createTeamForOwner } from "../lib/team";
 
+const getPendingInvite = () => {
+  try {
+    return window?.sessionStorage?.getItem("pendingInvite") || "";
+  } catch {
+    return "";
+  }
+};
+
+const clearPendingInvite = () => {
+  try {
+    window?.sessionStorage?.removeItem("pendingInvite");
+  } catch {
+    // ignore
+  }
+};
+
 export const signIn = (email, password) => {
   return signInWithEmailAndPassword(auth, email, password);
 };
@@ -104,6 +120,43 @@ export const signUpWithInvite = async (email, password, inviteCode) => {
   });
 
   await batch.commit();
+  clearPendingInvite();
+};
+
+const applyInviteToExistingUser = async (user, inviteCode) => {
+  if (!inviteCode) return null;
+  const inviteRef = doc(db, `artifacts/${appId}/invites`, inviteCode);
+  const inviteSnap = await getDoc(inviteRef);
+
+  if (!inviteSnap.exists() || inviteSnap.data().expiresAt.toDate() < new Date()) {
+    throw new Error("Ungueltiger oder abgelaufener Einladungscode.");
+  }
+
+  const { teamId, staffName } = inviteSnap.data();
+  const batch = writeBatch(db);
+
+  const memberRef = doc(db, `artifacts/${appId}/teams/${teamId}/members`, user.uid);
+  batch.set(memberRef, {
+    uid: user.uid,
+    role: "staff",
+    name: staffName || user.email?.split("@")[0] || "Staff",
+    email: user.email || "",
+    createdAt: Timestamp.now(),
+  });
+
+  const teamRef = doc(db, `artifacts/${appId}/teams`, teamId);
+  batch.update(teamRef, {
+    [`members.${user.uid}`]: { role: "staff" },
+  });
+
+  const userProfileRef = doc(db, "users", user.uid);
+  batch.set(userProfileRef, { teamId }, { merge: true });
+
+  batch.delete(inviteRef);
+
+  await batch.commit();
+  clearPendingInvite();
+  return { teamId, role: "staff" };
 };
 
 const resolveTeamInfo = async (user) => {
@@ -162,6 +215,17 @@ export const onAuthUserChanged = (callback) => {
           resolved = await resolveTeamInfo(user);
           if (resolved) break;
           await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+
+        if (!resolved) {
+          const pendingInvite = getPendingInvite();
+          if (pendingInvite) {
+            try {
+              resolved = await applyInviteToExistingUser(user, pendingInvite);
+            } catch (inviteError) {
+              console.error("Einladung konnte nicht angewendet werden:", inviteError);
+            }
+          }
         }
 
         if (!resolved) {

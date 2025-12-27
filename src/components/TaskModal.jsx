@@ -31,10 +31,40 @@ const formatCoord = (loc) => {
   return `${lat}, ${lng}${acc}`;
 };
 
+const mapUrl = (loc) => {
+  if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") return "";
+  return `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=18/${loc.lat}/${loc.lng}`;
+};
+
+const mapEmbedUrl = (loc) => {
+  if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") return "";
+  const lat = loc.lat;
+  const lng = loc.lng;
+  const bbox = `${lng - 0.002},${lat - 0.002},${lng + 0.002},${lat + 0.002}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&marker=${lat},${lng}`;
+};
+
+const calcDistanceMeters = (property, loc) => {
+  if (!property || typeof property.lat !== "number" || typeof property.lng !== "number") return null;
+  if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") return null;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(loc.lat - property.lat);
+  const dLng = toRad(loc.lng - property.lng);
+  const lat1 = toRad(property.lat);
+  const lat2 = toRad(loc.lat);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 export default function TaskModal({
   task,
   staff,
   teamId,
+  properties,
   onClose,
   onSave,
   isSaving,
@@ -44,6 +74,7 @@ export default function TaskModal({
   const [notes, setNotes] = useState(task?.notes || "");
   const [guestName, setGuestName] = useState(task?.guestName || "");
   const [workLogs, setWorkLogs] = useState({});
+  const safeProperties = Array.isArray(properties) ? properties : [];
 
   useEffect(() => {
     setAssignedTo(safeArray(task?.assignedTo));
@@ -80,6 +111,16 @@ export default function TaskModal({
     () => new Map(safeArray(staff).map((s) => [s.id, s])),
     [staff]
   );
+  const propertyByTask = useMemo(() => {
+    if (!task) return null;
+    if (task.apartmentId != null) {
+      const match = safeProperties.find(
+        (p) => String(p.apartmentId) === String(task.apartmentId)
+      );
+      if (match) return match;
+    }
+    return safeProperties.find((p) => p.name === task.apartment) || null;
+  }, [safeProperties, task]);
 
   if (!task) return null;
 
@@ -166,28 +207,105 @@ export default function TaskModal({
               </div>
             )}
 
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-sm">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-sm space-y-3">
               <p className="text-xs uppercase tracking-widest text-slate-400 mb-2">Zeiterfassung</p>
               <div className="space-y-2">
                 {Object.keys(workLogs).length === 0 && (
                   <p className="text-slate-500">Noch keine Zeiterfassung vorhanden.</p>
                 )}
+                {propertyByTask?.lat != null && propertyByTask?.lng != null && (
+                  <div className="rounded-xl bg-white border border-slate-100 p-3 text-xs text-slate-500">
+                    Objekt-Standort: {formatCoord({ lat: propertyByTask.lat, lng: propertyByTask.lng })}
+                    {mapUrl({ lat: propertyByTask.lat, lng: propertyByTask.lng }) && (
+                      <a
+                        className="ml-2 text-teal-600 hover:text-teal-700"
+                        href={mapUrl({ lat: propertyByTask.lat, lng: propertyByTask.lng })}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Karte
+                      </a>
+                    )}
+                  </div>
+                )}
                 {Object.entries(workLogs).map(([uid, log]) => {
                   const name = staffById.get(uid)?.name || uid;
+                  const startDistance = calcDistanceMeters(
+                    propertyByTask,
+                    log?.startLocation
+                  );
+                  const endDistance = calcDistanceMeters(
+                    propertyByTask,
+                    log?.endLocation
+                  );
                   return (
                     <div key={uid} className="rounded-xl bg-white border border-slate-100 p-3">
                       <p className="font-semibold text-slate-800">{name}</p>
                       <p className="text-xs text-slate-500">Start: {formatDateTime(log?.startedAt)}</p>
                       <p className="text-xs text-slate-500">Stop: {formatDateTime(log?.completedAt)}</p>
+                      {(startDistance != null || endDistance != null) && (
+                        <div className="mt-2 space-y-1 text-xs">
+                          {startDistance != null && (
+                            <p className={startDistance > 100 ? "text-red-600" : "text-emerald-600"}>
+                              Start-Abweichung: {Math.round(startDistance)}m
+                              {startDistance > 100 ? " (Abweichung)" : " (OK)"}
+                            </p>
+                          )}
+                          {endDistance != null && (
+                            <p className={endDistance > 100 ? "text-red-600" : "text-emerald-600"}>
+                              Ende-Abweichung: {Math.round(endDistance)}m
+                              {endDistance > 100 ? " (Abweichung)" : " (OK)"}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {log?.startLocation && (
-                        <p className="text-xs text-slate-400">
-                          GPS Start: {formatCoord(log.startLocation)}
-                        </p>
+                        <div className="space-y-2">
+                          <p className="text-xs text-slate-400">
+                            GPS Start: {formatCoord(log.startLocation)}{" "}
+                            {mapUrl(log.startLocation) && (
+                              <a
+                                className="text-teal-600 hover:text-teal-700"
+                                href={mapUrl(log.startLocation)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Karte
+                              </a>
+                            )}
+                          </p>
+                          {mapEmbedUrl(log.startLocation) && (
+                            <iframe
+                              title={`GPS Start ${uid}`}
+                              className="w-full h-32 rounded-xl border border-slate-200"
+                              src={mapEmbedUrl(log.startLocation)}
+                            />
+                          )}
+                        </div>
                       )}
                       {log?.endLocation && (
-                        <p className="text-xs text-slate-400">
-                          GPS Ende: {formatCoord(log.endLocation)}
-                        </p>
+                        <div className="space-y-2">
+                          <p className="text-xs text-slate-400">
+                            GPS Ende: {formatCoord(log.endLocation)}{" "}
+                            {mapUrl(log.endLocation) && (
+                              <a
+                                className="text-teal-600 hover:text-teal-700"
+                                href={mapUrl(log.endLocation)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Karte
+                              </a>
+                            )}
+                          </p>
+                          {mapEmbedUrl(log.endLocation) && (
+                            <iframe
+                              title={`GPS Ende ${uid}`}
+                              className="w-full h-32 rounded-xl border border-slate-200"
+                              src={mapEmbedUrl(log.endLocation)}
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -235,6 +353,44 @@ export default function TaskModal({
                     {staffById.get(id)?.name || id}
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+              <p className="text-xs uppercase tracking-widest text-slate-400">Fotos</p>
+              <div>
+                <p className="text-sm font-semibold text-slate-700 mb-2">Vorher</p>
+                <div className="flex flex-wrap gap-2">
+                  {(task.photos?.before || []).length === 0 && (
+                    <p className="text-xs text-slate-400">Keine Vorher-Fotos</p>
+                  )}
+                  {(task.photos?.before || []).map((src, idx) => (
+                    <img
+                      key={`before-${idx}`}
+                      src={src}
+                      alt="Vorher"
+                      className="w-24 h-24 rounded-xl object-cover border border-slate-200 cursor-pointer"
+                      onClick={() => window.open(src, "_blank")}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-700 mb-2">Nachher</p>
+                <div className="flex flex-wrap gap-2">
+                  {(task.photos?.after || []).length === 0 && (
+                    <p className="text-xs text-slate-400">Keine Nachher-Fotos</p>
+                  )}
+                  {(task.photos?.after || []).map((src, idx) => (
+                    <img
+                      key={`after-${idx}`}
+                      src={src}
+                      alt="Nachher"
+                      className="w-24 h-24 rounded-xl object-cover border border-slate-200 cursor-pointer"
+                      onClick={() => window.open(src, "_blank")}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>

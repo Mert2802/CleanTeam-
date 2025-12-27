@@ -1,16 +1,49 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Search, User } from "lucide-react";
+import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { db, appId } from "../../firebase";
 import DirectChat from "./DirectChat";
 
 const safeArray = (v) => (Array.isArray(v) ? v : []);
+const formatTime = (timestamp) => {
+  if (!timestamp?.toDate) return "";
+  return timestamp.toDate().toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 export default function AdminChat({ teamId, authUser, staff }) {
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
+  const [lastById, setLastById] = useState({});
 
   const staffList = useMemo(() => {
     return safeArray(staff).filter((member) => member.id !== authUser.uid);
   }, [staff, authUser.uid]);
+
+  useEffect(() => {
+    if (!selectedId && staffList.length > 0) {
+      setSelectedId(staffList[0].id);
+    }
+  }, [selectedId, staffList]);
+
+  useEffect(() => {
+    if (!teamId || staffList.length === 0) return undefined;
+    const unsubs = staffList.map((member) => {
+      const messagesRef = collection(
+        db,
+        `artifacts/${appId}/teams/${teamId}/directMessages/${member.id}/messages`
+      );
+      const q = query(messagesRef, orderBy("createdAt", "desc"), limit(1));
+      return onSnapshot(q, (snap) => {
+        const docSnap = snap.docs[0];
+        const data = docSnap ? { id: docSnap.id, ...docSnap.data() } : null;
+        setLastById((prev) => ({ ...prev, [member.id]: data }));
+      });
+    });
+    return () => unsubs.forEach((unsub) => unsub && unsub());
+  }, [teamId, staffList]);
 
   const filtered = staffList.filter((member) => {
     const term = search.trim().toLowerCase();
@@ -51,9 +84,16 @@ export default function AdminChat({ teamId, authUser, staff }) {
               <div className={`w-10 h-10 rounded-full ${member.color || "bg-slate-200"} flex items-center justify-center text-white font-bold`}>
                 {(member.name || "?").charAt(0)}
               </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{member.name || "Unbenannt"}</p>
-                <p className="text-xs text-slate-500">{member.role || "staff"}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{member.name || "Unbenannt"}</p>
+                  <span className="text-[10px] text-slate-400">
+                    {formatTime(lastById[member.id]?.createdAt)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 truncate">
+                  {lastById[member.id]?.text || "Noch keine Nachrichten"}
+                </p>
               </div>
             </button>
           ))}

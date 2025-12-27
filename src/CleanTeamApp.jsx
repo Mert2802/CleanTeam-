@@ -288,6 +288,7 @@ export default function CleanTeamApp({ authUser }) {
           task={activeTask}
           staff={staff}
           teamId={teamId}
+          properties={properties}
           onClose={() => setActiveTask(null)}
           onSave={handleTaskUpdate}
           isSaving={isSavingTask}
@@ -536,13 +537,20 @@ const StaffView = ({
     return task.status === statusFilter;
   });
 
+  const formatDateTime = (value) => {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
+
   const PhotoSection = ({ title, type, task }) => {
     const photos = task.photos?.[type] || [];
     const isUploading = uploadingTask === task.id;
 
     return (
       <div>
-        <h4 className="text-sm font-semibold text-slate-600 mb-2">{title}</h4>
+        <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">{title}</h4>
         <div className="flex flex-wrap gap-2">
           {photos.map((src, idx) => (
             <img
@@ -569,36 +577,38 @@ const StaffView = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-16">
-      <div className="p-6 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white shadow-lg rounded-b-[2.5rem] mb-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-slate-300 text-sm mb-1">Guten Tag,</p>
-            <h1 className="text-3xl font-bold">{myName}</h1>
-            <p className="text-slate-400 text-sm">{new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long" })}</p>
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 pb-16">
+      <div className="px-4 pt-6">
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-[28px] p-6 shadow-lg">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-slate-300 text-sm mb-1">Guten Tag,</p>
+              <h1 className="text-3xl font-bold">{myName}</h1>
+              <p className="text-slate-400 text-sm">{new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long" })}</p>
+            </div>
+            <button onClick={signOut} className="bg-white/10 p-2 rounded-xl backdrop-blur-sm hover:bg-white/20">
+              <LogOut size={20} />
+            </button>
           </div>
-          <button onClick={signOut} className="bg-white/10 p-2 rounded-xl backdrop-blur-sm hover:bg-white/20">
-            <LogOut size={20} />
-          </button>
-        </div>
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatPill label="Offen" value={pendingCount} />
-          <StatPill label="In Arbeit" value={inProgressCount} />
-          <StatPill label="Erledigt" value={completedCount} />
-          <StatPill label="Gesamt" value={totalCount} />
-        </div>
-        <div className="mt-4">
-          <div className="flex justify-between text-xs text-slate-300">
-            <span>Fortschritt</span>
-            <span>{progress}%</span>
+          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatPill label="Offen" value={pendingCount} />
+            <StatPill label="In Arbeit" value={inProgressCount} />
+            <StatPill label="Erledigt" value={completedCount} />
+            <StatPill label="Gesamt" value={totalCount} />
           </div>
-          <div className="h-2 bg-white/20 rounded-full mt-2">
-            <div className="h-2 bg-teal-400 rounded-full" style={{ width: `${progress}%` }}></div>
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-slate-300">
+              <span>Fortschritt</span>
+              <span>{progress}%</span>
+            </div>
+            <div className="h-2 bg-white/20 rounded-full mt-2">
+              <div className="h-2 bg-teal-400 rounded-full" style={{ width: `${progress}%` }}></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="px-4 space-y-6">
+      <div className="px-4 mt-6 space-y-6">
         <div className="flex flex-wrap gap-2">
           {[
             { id: "pending", label: `Offen (${pendingCount})` },
@@ -640,6 +650,11 @@ const StaffView = ({
                     <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${statusBadge(task.status)}`}>
                       {statusLabel(task.status)}
                     </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                    <span>Start: {formatDateTime(task.startedAt)}</span>
+                    <span>Stop: {formatDateTime(task.completedAt)}</span>
                   </div>
 
                   {task.notes && (
