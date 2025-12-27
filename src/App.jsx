@@ -6,7 +6,7 @@ import { enablePushNotifications } from "./lib/notifications";
 
 const PERMISSION_DEFAULT = "default";
 
-const PermissionsGate = ({ children }) => {
+const PermissionsGate = ({ authUser, children }) => {
   const [locationStatus, setLocationStatus] = useState(PERMISSION_DEFAULT);
   const [notificationStatus, setNotificationStatus] = useState(PERMISSION_DEFAULT);
 
@@ -74,6 +74,11 @@ const PermissionsGate = ({ children }) => {
     }
     const result = await Notification.requestPermission();
     setNotificationStatus(result);
+    if (result === "granted" && authUser?.uid) {
+      enablePushNotifications({ uid: authUser.uid }).catch((err) => {
+        console.error("Push Aktivierung fehlgeschlagen:", err);
+      });
+    }
     return result === "granted";
   };
 
@@ -158,7 +163,7 @@ const App = () => {
   }
 
   return authUser ? (
-    <PermissionsGate>
+    <PermissionsGate authUser={authUser}>
       <CleanTeamApp authUser={authUser} />
     </PermissionsGate>
   ) : (
