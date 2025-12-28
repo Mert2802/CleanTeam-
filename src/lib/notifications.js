@@ -84,7 +84,7 @@ export async function enablePushNotifications({ uid }) {
     doc(db, "users", uid),
     {
       pushToken: token,
-      pushTokens: arrayUnion(token),
+      pushTokens: [token],
       pushEnabled: true,
       pushUpdatedAt: new Date().toISOString(),
     },
@@ -121,7 +121,7 @@ export async function disablePushNotifications({ uid }) {
       doc(db, "users", uid),
       {
         pushToken: deleteField(),
-        pushTokens: arrayRemove(token),
+        pushTokens: [],
         pushEnabled: false,
         pushUpdatedAt: new Date().toISOString(),
       },
