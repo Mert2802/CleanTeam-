@@ -148,6 +148,7 @@ exports.onDirectMessageCreated = functions.firestore
     const message = snap.data() || {};
     const { teamId, staffId, messageId } = context.params;
     const sender = message.fromUid;
+    const toUid = message.toUid;
 
     if (!sender) return null;
 
@@ -159,7 +160,16 @@ exports.onDirectMessageCreated = functions.firestore
     let recipients = [];
     let title = "Neue Nachricht";
 
-    if (sender === staffId) {
+    if (toUid && toUid !== sender) {
+      recipients = [toUid];
+      if (sender === staffId) {
+        const staffMember = members.find((member) => member.uid === staffId);
+        const staffName = staffMember?.name || "Mitarbeiter";
+        title = `Neue Nachricht von ${staffName}`;
+      } else {
+        title = "Neue Nachricht vom Admin";
+      }
+    } else if (sender === staffId) {
       recipients = admins.filter((uid) => uid !== sender);
       const staffMember = members.find((member) => member.uid === staffId);
       const staffName = staffMember?.name || "Mitarbeiter";
