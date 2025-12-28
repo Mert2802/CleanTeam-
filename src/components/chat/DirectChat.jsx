@@ -25,6 +25,7 @@ export default function DirectChat({
   title,
   subtitle,
   toUid,
+  className = "",
 }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -78,7 +79,7 @@ export default function DirectChat({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+    <div className={`flex flex-col h-full bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden ${className}`}>
       <div className="p-5 border-b border-slate-100 bg-slate-50/70">
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
         {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}

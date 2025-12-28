@@ -245,17 +245,20 @@ export default function CleanTeamApp({ authUser }) {
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <div className="md:hidden bg-white/80 backdrop-blur p-4 flex items-center justify-between border-b border-slate-200">
-          <h1 className="font-bold text-lg flex items-center gap-2">
+          <button
+            onClick={() => setView("dashboard")}
+            className="font-bold text-lg flex items-center gap-2"
+          >
             <img src={`${import.meta.env.DEV ? "/" : import.meta.env.BASE_URL}cleanteam-icon.svg`} alt="CleanTeam" className="h-6 w-6" />
             CleanTeam
-          </h1>
+          </button>
           <button onClick={() => setSidebarOpen(true)} className="p-2 text-slate-600">
             <Menu size={24} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 md:p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
+        <div className={`flex-1 overflow-auto ${view === "chat" ? "p-4 md:p-6" : "p-4 md:p-8"}`}>
+          <div className={`${view === "chat" ? "h-[calc(100vh-120px)] min-h-[520px]" : "max-w-7xl mx-auto space-y-6"} ${view === "chat" ? "mx-auto w-full" : ""}`}>
             {view === "dashboard" && (
               <DashboardView
                 tasks={tasks}
@@ -283,7 +286,7 @@ export default function CleanTeamApp({ authUser }) {
               />
             )}
             {view === "chat" && (
-              <AdminChat teamId={teamId} authUser={authUser} staff={staff} />
+              <AdminChat teamId={teamId} authUser={authUser} staff={staff} className="h-full min-h-0" />
             )}
           </div>
         </div>
@@ -313,10 +316,16 @@ const Sidebar = ({ view, setView, sidebarOpen, setSidebarOpen }) => (
     } md:relative md:translate-x-0 shadow-xl`}
   >
     <div className="p-6 flex items-center justify-between">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
+      <button
+        onClick={() => {
+          setView("dashboard");
+          setSidebarOpen(false);
+        }}
+        className="text-2xl font-bold flex items-center gap-2"
+      >
         <img src={`${import.meta.env.DEV ? "/" : import.meta.env.BASE_URL}cleanteam-icon.svg`} alt="CleanTeam" className="h-7 w-7" />
         CleanTeam
-      </h1>
+      </button>
       <button onClick={() => setSidebarOpen(false)} className="md:hidden">
         <X size={24} />
       </button>
@@ -534,6 +543,7 @@ const StaffView = ({
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
   const [statusFilter, setStatusFilter] = useState("pending");
+  const [chatOpen, setChatOpen] = useState(false);
 
   const pendingCount = myTasks.filter((t) => t.status === "pending").length;
   const inProgressCount = myTasks.filter((t) => t.status === "in-progress").length;
@@ -591,6 +601,21 @@ const StaffView = ({
         <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-[28px] p-6 shadow-lg">
           <div className="flex justify-between items-start">
             <div>
+              <button
+                onClick={() => {
+                  setStatusFilter("pending");
+                  setChatOpen(false);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="flex items-center gap-2 mb-2"
+              >
+                <img
+                  src={`${import.meta.env.DEV ? "/" : import.meta.env.BASE_URL}cleanteam-icon.svg`}
+                  alt="CleanTeam"
+                  className="h-6 w-6"
+                />
+                <span className="text-sm text-slate-300">CleanTeam</span>
+              </button>
               <p className="text-slate-300 text-sm mb-1">Guten Tag,</p>
               <h1 className="text-3xl font-bold">{myName}</h1>
               <p className="text-slate-400 text-sm">{new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long" })}</p>
@@ -748,9 +773,39 @@ const StaffView = ({
         )}
 
         <div className="pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-slate-800">Chat</h3>
+            <button
+              onClick={() => setChatOpen(true)}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800"
+            >
+              Vollbild oeffnen
+            </button>
+          </div>
           <StaffChat teamId={teamId} authUser={authUser} staff={staff} />
         </div>
       </div>
+
+      {chatOpen && (
+        <div className="fixed inset-0 z-[80] bg-slate-900/80 backdrop-blur-sm p-4 md:p-6">
+          <div className="h-full max-w-5xl mx-auto">
+            <div className="h-full flex flex-col">
+              <div className="flex items-center justify-between mb-3 text-white">
+                <h2 className="text-lg font-semibold">Chat</h2>
+                <button
+                  onClick={() => setChatOpen(false)}
+                  className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20"
+                >
+                  Schliessen
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <StaffChat teamId={teamId} authUser={authUser} staff={staff} fullscreen />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

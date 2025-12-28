@@ -13,7 +13,7 @@ const formatTime = (timestamp) => {
   });
 };
 
-export default function AdminChat({ teamId, authUser, staff }) {
+export default function AdminChat({ teamId, authUser, staff, className = "" }) {
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
   const [lastById, setLastById] = useState({});
@@ -54,7 +54,7 @@ export default function AdminChat({ teamId, authUser, staff }) {
   const activeMember = staffList.find((m) => m.id === selectedId) || null;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 h-[70vh]">
+    <div className={`grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 h-full min-h-0 ${className}`}>
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-100">
           <h3 className="text-lg font-semibold text-slate-900">Chats</h3>
@@ -100,7 +100,7 @@ export default function AdminChat({ teamId, authUser, staff }) {
         </div>
       </div>
 
-      <div className="h-full">
+      <div className="h-full min-h-0">
         {activeMember ? (
           <DirectChat
             teamId={teamId}
@@ -109,6 +109,7 @@ export default function AdminChat({ teamId, authUser, staff }) {
             title={activeMember.name || "Mitarbeiter"}
             subtitle="Direkter Chat"
             toUid={activeMember.id}
+            className="h-full min-h-0"
           />
         ) : (
           <div className="h-full bg-white rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center text-slate-500">
