@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import Login from "./auth/Login";
 import CleanTeamApp from "./CleanTeamApp";
-import { enablePushNotifications } from "./lib/notifications";
+import { enablePushNotifications, onForegroundMessage } from "./lib/notifications";
 
 const PERMISSION_DEFAULT = "default";
 
@@ -152,6 +152,35 @@ const App = () => {
     enablePushNotifications({ uid: authUser.uid }).catch((err) => {
       console.error("Push Aktivierung fehlgeschlagen:", err);
     });
+  }, [authUser?.uid]);
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+
+    const setupForegroundNotifications = async () => {
+      if (!authUser?.uid) return;
+      if (typeof Notification === "undefined") return;
+      if (Notification.permission !== "granted") return;
+
+      unsubscribe = await onForegroundMessage((payload) => {
+        const title = payload?.notification?.title || "CleanTeam";
+        const body = payload?.notification?.body || "";
+        if (!title && !body) return;
+
+        try {
+          if (document.visibilityState === "visible") {
+            new Notification(title, { body });
+          }
+        } catch (err) {
+          console.warn("Foreground notification failed:", err);
+        }
+      });
+    };
+
+    setupForegroundNotifications();
+    return () => {
+      unsubscribe?.();
+    };
   }, [authUser?.uid]);
 
   if (isLoading) {
