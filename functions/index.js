@@ -34,19 +34,22 @@ async function getTokensByUid(uids) {
   const refs = uniqueUids.map((uid) => admin.firestore().doc(`users/${uid}`));
   const snaps = await admin.firestore().getAll(...refs);
 
-  const tokens = [];
+  const tokens = new Set();
   const tokenToUid = new Map();
   snaps.forEach((snap) => {
     if (!snap.exists) return;
     const uid = snap.id;
+    const primaryToken = snap.get("pushToken");
     const userTokens = snap.get("pushTokens") || [];
-    userTokens.forEach((token) => {
-      tokens.push(token);
+    const selectedTokens = primaryToken ? [primaryToken] : userTokens;
+    selectedTokens.forEach((token) => {
+      if (!token) return;
+      tokens.add(token);
       tokenToUid.set(token, uid);
     });
   });
 
-  return { tokens, tokenToUid };
+  return { tokens: Array.from(tokens), tokenToUid };
 }
 
 async function cleanupInvalidTokens(responses, tokenToUid, tokens) {
@@ -92,7 +95,7 @@ exports.sendTestPush = functions.https.onCall(async (_data, context) => {
   }
 
   const uid = context.auth.uid;
-  const title = "CleanTeam Test";
+  const title = "Testbenachrichtigung";
   const body = "Push-Benachrichtigung funktioniert.";
 
   await sendToUids({

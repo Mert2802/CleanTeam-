@@ -1,5 +1,5 @@
 import { getMessaging, getToken, deleteToken, onMessage, isSupported } from "firebase/messaging";
-import { arrayRemove, arrayUnion, doc, setDoc } from "firebase/firestore";
+import { arrayRemove, arrayUnion, deleteField, doc, setDoc } from "firebase/firestore";
 import { app, db } from "../firebase";
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
@@ -83,6 +83,7 @@ export async function enablePushNotifications({ uid }) {
   await setDoc(
     doc(db, "users", uid),
     {
+      pushToken: token,
       pushTokens: arrayUnion(token),
       pushEnabled: true,
       pushUpdatedAt: new Date().toISOString(),
@@ -119,6 +120,7 @@ export async function disablePushNotifications({ uid }) {
     await setDoc(
       doc(db, "users", uid),
       {
+        pushToken: deleteField(),
         pushTokens: arrayRemove(token),
         pushEnabled: false,
         pushUpdatedAt: new Date().toISOString(),
