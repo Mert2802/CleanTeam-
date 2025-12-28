@@ -3,7 +3,7 @@ import DirectChat from "./DirectChat";
 
 const safeArray = (v) => (Array.isArray(v) ? v : []);
 
-export default function StaffChat({ teamId, authUser, staff, fullscreen = false }) {
+export default function StaffChat({ teamId, authUser, staff, fullscreen = false, className = "" }) {
   const owner = safeArray(staff).find((member) => member.role === "owner");
 
   if (!owner) {
@@ -22,7 +22,7 @@ export default function StaffChat({ teamId, authUser, staff, fullscreen = false 
       title={owner.name || "Admin"}
       subtitle="Direkter Chat"
       toUid={owner.id}
-      className={fullscreen ? "h-full min-h-0" : "h-[420px] md:h-[520px] max-h-[70vh]"}
+      className={`${fullscreen ? "h-full min-h-0" : "h-[420px] md:h-[520px] max-h-[70vh]"} ${className}`}
     />
   );
 }

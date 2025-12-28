@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -26,6 +27,8 @@ export default function DirectChat({
   subtitle,
   toUid,
   className = "",
+  onBack,
+  backLabel = "Zurueck",
 }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -81,8 +84,21 @@ export default function DirectChat({
   return (
     <div className={`flex flex-col h-full bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden ${className}`}>
       <div className="p-5 border-b border-slate-100 bg-slate-50/70">
-        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-        {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="lg:hidden flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
+            >
+              <ArrowLeft size={18} />
+              {backLabel}
+            </button>
+          )}
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+            {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-3">

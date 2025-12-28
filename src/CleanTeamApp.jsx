@@ -257,8 +257,8 @@ export default function CleanTeamApp({ authUser }) {
           </button>
         </div>
 
-        <div className={`flex-1 overflow-auto ${view === "chat" ? "p-4 md:p-6" : "p-4 md:p-8"}`}>
-          <div className={`${view === "chat" ? "h-[calc(100vh-120px)] min-h-[520px]" : "max-w-7xl mx-auto space-y-6"} ${view === "chat" ? "mx-auto w-full" : ""}`}>
+        <div className={`flex-1 overflow-auto ${view === "chat" ? "p-0 md:p-6" : "p-4 md:p-8"}`}>
+          <div className={`${view === "chat" ? "h-[calc(100vh-120px)] md:h-[calc(100vh-140px)]" : "max-w-7xl mx-auto space-y-6"} ${view === "chat" ? "w-full" : ""}`}>
             {view === "dashboard" && (
               <DashboardView
                 tasks={tasks}
@@ -777,12 +777,23 @@ const StaffView = ({
             <h3 className="text-lg font-semibold text-slate-800">Chat</h3>
             <button
               onClick={() => setChatOpen(true)}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800"
+              className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 lg:hidden"
             >
-              Vollbild oeffnen
+              Chat oeffnen
             </button>
           </div>
-          <StaffChat teamId={teamId} authUser={authUser} staff={staff} />
+          <div className="lg:hidden">
+            <button
+              onClick={() => setChatOpen(true)}
+              className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-left shadow-sm hover:bg-slate-50"
+            >
+              <p className="text-sm font-semibold text-slate-800">Nachricht an Admin</p>
+              <p className="text-xs text-slate-500">Tippe, um den Chat im Vollbild zu oeffnen.</p>
+            </button>
+          </div>
+          <div className="hidden lg:block">
+            <StaffChat teamId={teamId} authUser={authUser} staff={staff} />
+          </div>
         </div>
       </div>
 
@@ -800,7 +811,7 @@ const StaffView = ({
                 </button>
               </div>
               <div className="flex-1 min-h-0">
-                <StaffChat teamId={teamId} authUser={authUser} staff={staff} fullscreen />
+                <StaffChat teamId={teamId} authUser={authUser} staff={staff} fullscreen className="rounded-3xl" />
               </div>
             </div>
           </div>

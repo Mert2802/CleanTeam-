@@ -17,6 +17,16 @@ export default function AdminChat({ teamId, authUser, staff, className = "" }) {
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
   const [lastById, setLastById] = useState({});
+  const [isMobile, setIsMobile] = useState(false);
+  const [showThread, setShowThread] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1023px)");
+    const handleChange = () => setIsMobile(media.matches);
+    handleChange();
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, []);
 
   const staffList = useMemo(() => {
     return safeArray(staff).filter((member) => member.id !== authUser.uid);
@@ -27,6 +37,16 @@ export default function AdminChat({ teamId, authUser, staff, className = "" }) {
       setSelectedId(staffList[0].id);
     }
   }, [selectedId, staffList]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setShowThread(true);
+      return;
+    }
+    if (!selectedId) {
+      setShowThread(false);
+    }
+  }, [isMobile, selectedId]);
 
   useEffect(() => {
     if (!teamId || staffList.length === 0) return undefined;
@@ -55,7 +75,9 @@ export default function AdminChat({ teamId, authUser, staff, className = "" }) {
 
   return (
     <div className={`grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 h-full min-h-0 ${className}`}>
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+      <div className={`bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col ${
+        isMobile && showThread ? "hidden" : "block"
+      }`}>
         <div className="p-4 border-b border-slate-100">
           <h3 className="text-lg font-semibold text-slate-900">Chats</h3>
           <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
@@ -76,7 +98,10 @@ export default function AdminChat({ teamId, authUser, staff, className = "" }) {
           {filtered.map((member) => (
             <button
               key={member.id}
-              onClick={() => setSelectedId(member.id)}
+              onClick={() => {
+                setSelectedId(member.id);
+                if (isMobile) setShowThread(true);
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-slate-100 hover:bg-slate-50 ${
                 selectedId === member.id ? "bg-teal-50" : "bg-white"
               }`}
@@ -100,7 +125,7 @@ export default function AdminChat({ teamId, authUser, staff, className = "" }) {
         </div>
       </div>
 
-      <div className="h-full min-h-0">
+      <div className={`h-full min-h-0 ${isMobile && !showThread ? "hidden" : "block"}`}>
         {activeMember ? (
           <DirectChat
             teamId={teamId}
@@ -110,6 +135,8 @@ export default function AdminChat({ teamId, authUser, staff, className = "" }) {
             subtitle="Direkter Chat"
             toUid={activeMember.id}
             className="h-full min-h-0"
+            onBack={() => setShowThread(false)}
+            backLabel="Kontakte"
           />
         ) : (
           <div className="h-full bg-white rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center text-slate-500">
